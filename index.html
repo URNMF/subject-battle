@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>正負數擂台：整數決戰</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+    .author-badge { position: fixed; top: 10px; right: 14px; font-size: 12px; color: var(--text-muted); z-index: 100; pointer-events: none; }
+    .screen { display: none; width: 100%; height: 100vh; padding: 16px; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+    .screen.active { display: flex; }
+    .card { background: var(--card-bg); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 480px; text-align: center; border: 1px solid #334155; }
+    h1 { font-size: 26px; margin-bottom: 8px; color: var(--primary); }
+    h2 { font-size: 20px; margin-bottom: 16px; }
+    p { color: var(--text-muted); font-size: 14px; margin-bottom: 16px; }
+    input[type="text"] { width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 16px; margin-bottom: 16px; outline: none; }
+    input[type="text"]:focus { border-color: var(--primary); }
+    button { width: 100%; padding: 12px 20px; border-radius: 8px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #0f172a; }
+    button:hover { background: var(--primary-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-outline { background: transparent; border: 1px solid #475569; color: var(--text); }
+    .btn-outline:hover { background: #334155; }
+    .status-text { font-size: 12px; margin-top: 12px; color: var(--text-muted); }
+    .room-list { max-height: 240px; overflow-y: auto; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+    .room-item { background: #0f172a; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; }
+    .room-item-name { font-weight: bold; }
+    .room-item button { width: auto; padding: 6px 14px; font-size: 14px; }
+    
+    /* Battle Screen */
+    #screen-battle { padding: 8px; justify-content: space-between; max-width: 960px; margin: 0 auto; height: 100vh; }
+    .battle-hud { width: 100%; display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 8px 16px; border-radius: 12px; border: 1px solid #334155; }
+    .player-box { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 40%; }
+    .player-box.left { align-items: flex-start; text-align: left; }
+    .player-box.right { align-items: flex-end; text-align: right; }
+    .player-avatar { font-size: 32px; }
+    .player-name { font-weight: bold; font-size: 14px; }
+    .hp-bar-wrap { width: 100%; max-width: 140px; height: 10px; background: #334155; border-radius: 5px; overflow: hidden; }
+    .hp-bar-inner { height: 100%; background: var(--success); width: 100%; transition: width 0.3s ease; }
+    .hp-text { font-size: 12px; color: var(--text-muted); font-weight: bold; }
+    .vs-text { font-size: 18px; font-weight: 900; color: var(--warning); }
+    
+    .question-box { background: var(--card-bg); width: 100%; border-radius: 16px; padding: 20px; border: 1px solid #334155; text-align: center; margin: 8px 0; }
+    .question-prompt { font-size: 14px; color: var(--text-muted); margin-bottom: 6px; }
+    .question-text { font-size: 28px; font-weight: bold; color: var(--primary); letter-spacing: 1px; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+    
+    .answers-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
+    .answer-btn { background: #1e293b; border: 2px solid #38bdf8; color: #fff; font-size: 22px; font-weight: bold; padding: 14px; border-radius: 12px; height: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .answer-btn:hover { background: #38bdf8; color: #0f172a; }
+    
+    .feedback-toast { height: 28px; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+    .feedback-correct { color: var(--success); }
+    .feedback-wrong { color: var(--danger); }
+    
+    /* Overlay */
+    .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 200; flex-direction: column; padding: 20px; }
+    .overlay.active { display: flex; }
+    
+    /* Orientation Warning */
+    #orient-warning { display: none; }
+    @media (max-width: 768px) and (orientation: portrait) {
+      #orient-warning { display: flex; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0b0f19; z-index: 999; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
+      #orient-warning h2 { font-size: 24px; color: var(--warning); margin-bottom: 8px; }
+      #orient-warning p { color: var(--text-muted); font-size: 16px; }
+    }
+    
+    .shake { animation: shakeAnim 0.4s; }
+    @keyframes shakeAnim {
+      0% { transform: translate(1px, 1px); }
+      20% { transform: translate(-3px, 0px); }
+      40% { transform: translate(3px, 2px); }
+      60% { transform: translate(-1px, -1px); }
+      80% { transform: translate(2px, 1px); }
+      100% { transform: translate(0, 0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="author-badge">來自新北的黃先生</div>
+
+  <div id="orient-warning">
+    <h2>↻ 請將手機橫向放置</h2>
+    <p>為了獲得最佳對戰體驗，請旋轉手機使用橫向模式。</p>
+  </div>
+
+  <!-- 登入與暱稱設定 -->
+  <div id="screen-home" class="screen active">
+    <div class="card">
+      <h1>正負數擂台：整數決戰</h1>
+      <p>七年級數學對決！熟練正負整數加減，打敗你的對手！</p>
+      <input type="text" id="input-nickname" maxlength="20" placeholder="請輸入你的暱稱 (1~20 字)">
+      <button id="btn-enter-lobby">進入遊戲大廳</button>
+      <div id="db-status" class="status-text">連線中...</div>
+    </div>
+  </div>
+
+  <!-- 遊戲大廳 -->
+  <div id="screen-lobby" class="screen">
+    <div class="card">
+      <h2>遊戲大廳</h2>
+      <p>目前玩家：<strong id="display-my-name" style="color: var(--primary);"></strong></p>
+      <button id="btn-create-room" style="margin-bottom: 12px;">+ 建立對戰房間</button>
+      <div style="font-size: 14px; text-align: left; color: var(--text-muted); margin-top: 8px;">等待中的房間：</div>
+      <div class="room-list" id="room-list">
+        <div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">目前沒有等待中的房間</div>
+      </div>
+      <button id="btn-refresh-rooms" class="btn-outline" style="margin-top: 8px;">重新整理房間</button>
+    </div>
+  </div>
+
+  <!-- 等待配對畫面 -->
+  <div id="screen-waiting" class="screen">
+    <div class="card">
+      <h2>等待對手加入……</h2>
+      <p style="margin: 20px 0; font-size: 16px;">房間已建立，等待同學加入對戰！</p>
+      <button id="btn-cancel-room" class="btn-danger">取消房間並回大廳</button>
+    </div>
+  </div>
+
+  <!-- 戰鬥畫面 -->
+  <div id="screen-battle" class="screen">
+    <div class="battle-hud">
+      <div class="player-box left">
+        <div class="player-avatar" id="p1-avatar">🐶</div>
+        <div class="player-name" id="hud-my-name">我方</div>
+        <div class="hp-bar-wrap"><div class="hp-bar-inner" id="my-hp-bar"></div></div>
+        <div class="hp-text">HP: <span id="my-hp-val">7</span>/7</div>
+      </div>
+      <div class="vs-text">VS</div>
+      <div class="player-box right">
+        <div class="player-avatar" id="p2-avatar">🐱</div>
+        <div class="player-name" id="hud-op-name">對手</div>
+        <div class="hp-bar-wrap"><div class="hp-bar-inner" id="op-hp-bar"></div></div>
+        <div class="hp-text">HP: <span id="op-hp-val">7</span>/7</div>
+      </div>
+    </div>
+
+    <div class="question-box" id="q-box">
+      <div class="question-prompt">請計算下列整數運算：</div>
+      <div class="question-text" id="q-text">(-12) + (+8) = ?</div>
+    </div>
+
+    <div class="feedback-toast" id="feedback-msg"></div>
+
+    <div class="answers-grid">
+      <button class="answer-btn" id="btn-ans-0" onclick="handleSelectAnswer(0)">A</button>
+      <button class="answer-btn" id="btn-ans-1" onclick="handleSelectAnswer(1)">B</button>
+      <button class="answer-btn" id="btn-ans-2" onclick="handleSelectAnswer(2)">C</button>
+      <button class="answer-btn" id="btn-ans-3" onclick="handleSelectAnswer(3)">D</button>
+    </div>
+  </div>
+
+  <!-- 結算 Overlay -->
+  <div id="overlay-result" class="overlay">
+    <div class="card">
+      <h1 id="result-title" style="font-size: 32px; margin-bottom: 12px;">勝利！</h1>
+      <p id="result-desc" style="font-size: 16px; margin-bottom: 24px;">你展現了高超的正負整數加減實力！</p>
+      <button id="btn-back-to-lobby">回到遊戲大廳</button>
+    </div>
+  </div>
+
+  <!-- 斷線 Overlay -->
+  <div id="overlay-disconnect" class="overlay">
+    <div class="card">
+      <h2 style="color: var(--danger);">對手已斷線</h2>
+      <p style="margin: 16px 0;">對方暫時離開或網路連線中斷。</p>
+      <button id="btn-disconnect-lobby">回到遊戲大廳</button>
+    </div>
+  </div>
+
+  <script>
+    // Supabase 配置
+    const SUPABASE_URL = 'https://jfgjbkaacnhsnmuxkzfs.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w2dnA-k2dzK8pR9MG8k-nw_y6TAe2UD';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+    // 狀態變數
+    let clientToken = localStorage.getItem('sequence_battle_client_token');
+    if (!clientToken) {
+      clientToken = (crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+      localStorage.setItem('sequence_battle_client_token', clientToken);
+    }
+
+    let myNickname = '';
+    let currentRoomId = null;
+    let currentSeat = null;
+    let heartbeatTimer = null;
+    let disconnectTimer = null;
+    let opponentWasPresent = false;
+    let currentQuestion = null;
+    let lastEventId = null;
+    let gameChannel = null;
+    let lobbyChannel = null;
+
+    const AVATARS = ['🐱', '🐶', '🐻', '🐼', '🐧', '🤡', '🥸', '👽', '💩', '🦒', '🐒'];
+
+    // 畫面切換
+    function showScreen(screenId) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById(screenId);
+      if (target) target.classList.add('active');
+    }
+
+    // 連線初始化檢查
+    async function initConnection() {
+      try {
+        const { error } = await supabase.from('rooms').select('id').limit(1);
+        const statusEl = document.getElementById('db-status');
+        if (!error) {
+          statusEl.innerText = '資料庫已連接';
+          statusEl.style.color = 'var(--success)';
+        } else {
+          statusEl.innerText = '資料庫連線中...';
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    initConnection();
+
+    // 暱稱輸入與大廳切換
+    document.getElementById('btn-enter-lobby').addEventListener('click', () => {
+      const input = document.getElementById('input-nickname');
+      const val = input.value.trim();
+      if (!val) { alert('請輸入有效暱稱！'); return; }
+      myNickname = val;
+      document.getElementById('display-my-name').innerText = myNickname;
+      enterLobby();
+    });
+
+    // 大廳邏輯
+    async function enterLobby() {
+      cleanUpAll();
+      showScreen('screen-lobby');
+      await refreshLiveRooms();
+      subscribeLobby();
+    }
+
+    function subscribeLobby() {
+      if (lobbyChannel) supabase.removeChannel(lobbyChannel);
+      lobbyChannel = supabase.channel('lobby-rooms')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
+          refreshLiveRooms();
+        })
+        .subscribe();
+    }
+
+    async function refreshLiveRooms() {
+      const { data, error } = await supabase.rpc('list_live_rooms');
+      const listEl = document.getElementById('room-list');
+      listEl.innerHTML = '';
+      if (error || !data || data.length === 0) {
+        listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">目前沒有等待中的房間</div>';
+        return;
+      }
+      data.forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'room-item';
+        item.innerHTML = `
+          <div class="room-item-name">${escapeHtml(r.host_nickname)} 的房間</div>
+          <button onclick="attemptJoinRoom('${r.id}')">加入對戰</button>
+        `;
+        listEl.appendChild(item);
+      });
+    }
+
+    document.getElementById('btn-refresh-rooms').addEventListener('click', refreshLiveRooms);
+
+    // 建立房間
+    document.getElementById('btn-create-room').addEventListener('click', async () => {
+      try {
+        const { data, error } = await supabase.rpc('create_room', {
+          p_nickname: myNickname,
+          p_client_token: clientToken
+        });
+        if (error) { alert('建立房間失敗：' + error.message); return; }
+        currentRoomId = data.room_id;
+        currentSeat = 1;
+        showScreen('screen-waiting');
+        startWaitingHost(currentRoomId);
+      } catch (err) {
+        alert('發生網路錯誤，請稍後再試。');
+      }
+    });
+
+    // 取消房間
+    document.getElementById('btn-cancel-room').addEventListener('click', async () => {
+      if (!currentRoomId) return;
+      await supabase.rpc('cancel_room', { p_room_id: currentRoomId, p_client_token: clientToken });
+      enterLobby();
+    });
+
+    // 房主等待狀態：心跳 + 監聽探針 + 監聽開局
+    function startWaitingHost(roomId) {
+      heartbeatTimer = setInterval(async () => {
+        if (!currentRoomId) return;
+        await supabase.rpc('heartbeat_room', { p_room_id: roomId, p_client_token: clientToken });
+      }, 3000);
+
+      const channel = supabase.channel(`game-${roomId}`);
+      gameChannel = channel;
+
+      channel
+        .on('broadcast', { event: 'join_probe' }, (payload) => {
+          channel.send({
+            type: 'broadcast',
+            event: 'host_ack',
+            payload: { probe_id: payload.payload.probe_id }
+          });
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `room_id=eq.${roomId}` }, (payload) => {
+          if (payload.new.status === 'playing') {
+            stopHeartbeat();
+            startGame(payload.new);
+          }
+        })
+        .subscribe();
+    }
+
+    // 加入者 2 秒握手加入
+    async function attemptJoinRoom(roomId) {
+      const probeId = Math.random().toString(36).substring(2, 9);
+      const tempChannel = supabase.channel(`game-${roomId}`);
+      let hostAcked = false;
+
+      tempChannel
+        .on('broadcast', { event: 'host_ack' }, (payload) => {
+          if (payload.payload && payload.payload.probe_id === probeId) {
+            hostAcked = true;
+          }
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await tempChannel.send({
+              type: 'broadcast',
+              event: 'join_probe',
+              payload: { probe_id: probeId }
+            });
+
+            setTimeout(async () => {
+              if (!hostAcked) {
+                supabase.removeChannel(tempChannel);
+                alert('房主已離開，請選其他房間。');
+                refreshLiveRooms();
+                return;
+              }
+
+              try {
+                const { data, error } = await supabase.rpc('join_room', {
+                  p_room_id: roomId,
+                  p_nickname: myNickname,
+                  p_client_token: clientToken
+                });
+
+                if (error) {
+                  supabase.removeChannel(tempChannel);
+                  if (error.message.includes('HOST_OFFLINE')) {
+                    alert('房主已離開，請選其他房間。');
+                  } else if (error.message.includes('ROOM_ALREADY_FULL')) {
+                    alert('房間人數已滿！');
+                  } else {
+                    alert('加入房間失敗：' + error.message);
+                  }
+                  refreshLiveRooms();
+                  return;
+                }
+
+                currentRoomId = roomId;
+                currentSeat = 2;
+                supabase.removeChannel(tempChannel);
+
+                const { data: gs } = await supabase.from('game_state').select('*').eq('room_id', roomId).single();
+                startGame(gs);
+              } catch (err) {
+                supabase.removeChannel(tempChannel);
+                alert('網路錯誤，無法加入對戰。');
+              }
+            }, 2000);
+          }
+        });
+    }
+
+    // 進入正式戰鬥
+    function startGame(gameState) {
+      cleanTimers();
+      showScreen('screen-battle');
+
+      // 角色配置（以 roomId 為固定 seed）
+      const seedNum = (currentRoomId || '0000').split('-')[0];
+      const parsedSeed = parseInt(seedNum, 16) || 12345;
+      const a1 = AVATARS[parsedSeed % AVATARS.length];
+      const a2 = AVATARS[(parsedSeed + 3) % AVATARS.length];
+
+      document.getElementById('p1-avatar').innerText = currentSeat === 1 ? a1 : a2;
+      document.getElementById('p2-avatar').innerText = currentSeat === 1 ? a2 : a1;
+      document.getElementById('hud-my-name').innerText = currentSeat === 1 ? gameState.player1_name : (gameState.player2_name || myNickname);
+      document.getElementById('hud-op-name').innerText = currentSeat === 1 ? (gameState.player2_name || '對手') : gameState.player1_name;
+
+      renderGameState(gameState);
+      generateNextQuestion();
+      setupBattleChannel();
+    }
+
+    // 對戰通道與 Presence
+    function setupBattleChannel() {
+      if (gameChannel) supabase.removeChannel(gameChannel);
+
+      const channel = supabase.channel(`game-${currentRoomId}`, {
+        config: { presence: { key: clientToken } }
+      });
+      gameChannel = channel;
+
+      channel
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState();
+          const presentTokens = Object.keys(state);
+          const hasOpponent = presentTokens.some(k => k !== clientToken);
+
+          if (hasOpponent) {
+            opponentWasPresent = true;
+            if (disconnectTimer) {
+              clearTimeout(disconnectTimer);
+              disconnectTimer = null;
+            }
+          } else if (opponentWasPresent) {
+            if (!disconnectTimer) {
+              disconnectTimer = setTimeout(() => {
+                document.getElementById('overlay-disconnect').classList.add('active');
+              }, 5000);
+            }
+          }
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `room_id=eq.${currentRoomId}` }, (payload) => {
+          renderGameState(payload.new);
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await channel.track({ seat: currentSeat, nickname: myNickname });
+          }
+        });
+    }
+
+    // 渲染戰鬥狀態
+    function renderGameState(gs) {
+      if (!gs) return;
+      const myHp = currentSeat === 1 ? gs.player1_hp : gs.player2_hp;
+      const opHp = currentSeat === 1 ? gs.player2_hp : gs.player1_hp;
+
+      document.getElementById('my-hp-val').innerText = myHp;
+      document.getElementById('op-hp-val').innerText = opHp;
+      document.getElementById('my-hp-bar').style.width = `${Math.max(0, (myHp / 7) * 100)}%`;
+      document.getElementById('op-hp-bar').style.width = `${Math.max(0, (opHp / 7) * 100)}%`;
+
+      if (gs.last_event_id && gs.last_event_id !== lastEventId) {
+        lastEventId = gs.last_event_id;
+        triggerEventEffect(gs.last_event_type, gs.last_event_seat);
+      }
+
+      if (gs.status === 'finished') {
+        setTimeout(() => {
+          showResultOverlay(gs.winner_seat);
+        }, 500);
+      }
+    }
+
+    // 動畫效果
+    function triggerEventEffect(type, eventSeat) {
+      const qBox = document.getElementById('q-box');
+      if (eventSeat === currentSeat) {
+        if (type === 'hit') {
+          showFeedback('答對了！發動強力攻擊！', 'feedback-correct');
+        } else {
+          showFeedback('答錯了！自身受到反衝受傷！', 'feedback-wrong');
+          qBox.classList.add('shake');
+          setTimeout(() => qBox.classList.remove('shake'), 400);
+        }
+      } else {
+        if (type === 'hit') {
+          showFeedback('對手答對！你受到攻擊！', 'feedback-wrong');
+          qBox.classList.add('shake');
+          setTimeout(() => qBox.classList.remove('shake'), 400);
+        } else {
+          showFeedback('對手答錯受到反衝！', 'feedback-correct');
+        }
+      }
+    }
+
+    function showFeedback(text, cls) {
+      const fb = document.getElementById('feedback-msg');
+      fb.className = `feedback-toast ${cls}`;
+      fb.innerText = text;
+      setTimeout(() => {
+        if (fb.innerText === text) fb.innerText = '';
+      }, 1500);
+    }
+
+    // 結算畫面
+    function showResultOverlay(winnerSeat) {
+      const overlay = document.getElementById('overlay-result');
+      const title = document.getElementById('result-title');
+      const desc = document.getElementById('result-desc');
+
+      if (winnerSeat === currentSeat) {
+        title.innerText = '🏆 榮獲勝利！';
+        title.style.color = 'var(--warning)';
+        desc.innerText = '正負數運算精準迅速，成功擊倒對手！太優秀了！';
+      } else {
+        title.innerText = '💪 再接再厲！';
+        title.style.color = 'var(--text-muted)';
+        desc.innerText = '差一點就成功了！調整正負符號的觀念，下次一定能獲勝！';
+      }
+      overlay.classList.add('active');
+    }
+
+    document.getElementById('btn-back-to-lobby').addEventListener('click', () => {
+      document.getElementById('overlay-result').classList.remove('active');
+      enterLobby();
+    });
+
+    document.getElementById('btn-disconnect-lobby').addEventListener('click', () => {
+      document.getElementById('overlay-disconnect').classList.remove('active');
+      enterLobby();
+    });
+
+    // 數學題目亂數產生器（七年級整數加減）
+    function generateIntegerProblem() {
+      const types = ['add', 'sub', 'neg_add', 'complex'];
+      const chosen = types[Math.floor(Math.random() * types.length)];
+      let text = '';
+      let ans = 0;
+
+      const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+      const randNonZero = (min, max) => {
+        let v = 0;
+        while (v === 0) v = randInt(min, max);
+        return v;
+      };
+
+      const fmt = (n) => n < 0 ? `(${n})` : `${n}`;
+
+      if (chosen === 'add') {
+        const a = randNonZero(-30, 30);
+        const b = randNonZero(-30, 30);
+        text = `${fmt(a)} + ${fmt(b)}`;
+        ans = a + b;
+      } else if (chosen === 'sub') {
+        const a = randNonZero(-30, 30);
+        const b = randNonZero(-30, 30);
+        text = `${fmt(a)} - ${fmt(b)}`;
+        ans = a - b;
+      } else if (chosen === 'neg_add') {
+        const a = randNonZero(-50, -5);
+        const b = randNonZero(5, 50);
+        text = `${fmt(a)} + ${fmt(b)}`;
+        ans = a + b;
+      } else {
+        const a = randNonZero(-20, 20);
+        const b = randNonZero(-20, 20);
+        const c = randNonZero(-20, 20);
+        text = `${fmt(a)} - ${fmt(b)} + ${fmt(c)}`;
+        ans = a - b + c;
+      }
+
+      // 生成 4 個不重複選項
+      const optionsSet = new Set();
+      optionsSet.add(ans);
+      const offsets = [-1, 1, -2, 2, -10, 10, -ans * 2];
+
+      while (optionsSet.size < 4) {
+        const off = offsets[Math.floor(Math.random() * offsets.length)] || randInt(-15, 15);
+        const fake = ans + off;
+        if (fake !== ans) optionsSet.add(fake);
+      }
+
+      const options = Array.from(optionsSet).sort(() => Math.random() - 0.5);
+      return { text: `${text} = ?`, options, correctAns: ans };
+    }
+
+    function generateNextQuestion() {
+      currentQuestion = generateIntegerProblem();
+      document.getElementById('q-text').innerText = currentQuestion.text;
+      for (let i = 0; i < 4; i++) {
+        const btn = document.getElementById(`btn-ans-${i}`);
+        btn.innerText = currentQuestion.options[i];
+        btn.disabled = false;
+      }
+    }
+
+    async function handleSelectAnswer(index) {
+      if (!currentQuestion) return;
+      for (let i = 0; i < 4; i++) {
+        document.getElementById(`btn-ans-${i}`).disabled = true;
+      }
+
+      const selectedVal = currentQuestion.options[index];
+      const isCorrect = (selectedVal === currentQuestion.correctAns);
+
+      try {
+        await supabase.rpc('resolve_answer', {
+          p_room_id: currentRoomId,
+          p_client_token: clientToken,
+          p_is_correct: isCorrect
+        });
+      } catch (err) {
+        console.error(err);
+      }
+
+      setTimeout(() => {
+        generateNextQuestion();
+      }, 400);
+    }
+
+    // 清理機制
+    function cleanTimers() {
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+      if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+    }
+
+    function stopHeartbeat() {
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    }
+
+    function cleanUpAll() {
+      cleanTimers();
+      opponentWasPresent = false;
+      if (gameChannel) { supabase.removeChannel(gameChannel); gameChannel = null; }
+      currentRoomId = null;
+      currentSeat = null;
+      lastEventId = null;
+    }
+
+    // 防離開頁面（房主關閉等待中頁面）
+    window.addEventListener('pagehide', () => {
+      if (currentRoomId && currentSeat === 1 && heartbeatTimer) {
+        const url = `${SUPABASE_URL}/rest/v1/rpc/cancel_room`;
+        const payload = JSON.stringify({ p_room_id: currentRoomId, p_client_token: clientToken });
+        fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+          },
+          body: payload,
+          keepalive: true
+        });
+      }
+    });
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
+    }
+  </script>
+</body>
+</html>
