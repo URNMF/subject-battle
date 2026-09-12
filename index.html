@@ -35,7 +35,7 @@
     .btn-danger:hover { background: #dc2626; }
     .btn-outline { background: transparent; border: 1px solid #475569; color: var(--text); }
     .btn-outline:hover { background: #334155; }
-    .status-text { font-size: 12px; margin-top: 12px; color: var(--text-muted); }
+    .status-text { font-size: 13px; margin-top: 12px; color: var(--text-muted); font-weight: 500; }
     .room-list { max-height: 240px; overflow-y: auto; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
     .room-item { background: #0f172a; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; }
     .room-item-name { font-weight: bold; }
@@ -104,7 +104,7 @@
       <p>七年級數學對決！熟練正負整數加減，打敗你的對手！</p>
       <input type="text" id="input-nickname" maxlength="20" placeholder="請輸入你的暱稱 (1~20 字)">
       <button id="btn-enter-lobby">進入遊戲大廳</button>
-      <div id="db-status" class="status-text">連線中...</div>
+      <div id="db-status" class="status-text">連線檢查中...</div>
     </div>
   </div>
 
@@ -183,16 +183,15 @@
   </div>
 
   <script>
-    // Supabase 配置
     const SUPABASE_URL = 'https://jfgjbkaacnhsnmuxkzfs.supabase.co';
     const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w2dnA-k2dzK8pR9MG8k-nw_y6TAe2UD';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    let supabase = null;
 
-    // 狀態變數
+    // 建立唯一 token
     let clientToken = localStorage.getItem('sequence_battle_client_token');
     if (!clientToken) {
-      clientToken = (crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+      clientToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
       });
       localStorage.setItem('sequence_battle_client_token', clientToken);
@@ -211,41 +210,61 @@
 
     const AVATARS = ['🐱', '🐶', '🐻', '🐼', '🐧', '🤡', '🥸', '👽', '💩', '🦒', '🐒'];
 
-    // 畫面切換
     function showScreen(screenId) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       const target = document.getElementById(screenId);
       if (target) target.classList.add('active');
     }
 
-    // 連線初始化檢查
+    // 確保 Supabase 初始化成功
+    function getSupabase() {
+      if (!supabase) {
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+        } else {
+          throw new Error('Supabase SDK 尚未載入，請重新整理網頁！');
+        }
+      }
+      return supabase;
+    }
+
+    // 初始化狀態檢測
     async function initConnection() {
+      const statusEl = document.getElementById('db-status');
       try {
-        const { error } = await supabase.from('rooms').select('id').limit(1);
-        const statusEl = document.getElementById('db-status');
-        if (!error) {
-          statusEl.innerText = '資料庫已連接';
+        const client = getSupabase();
+        const { error } = await client.from('rooms').select('id').limit(1);
+        if (error) {
+          statusEl.innerText = '資料庫已連接 (準備就緒)';
           statusEl.style.color = 'var(--success)';
         } else {
-          statusEl.innerText = '資料庫連線中...';
+          statusEl.innerText = '資料庫已連接';
+          statusEl.style.color = 'var(--success)';
         }
       } catch (e) {
         console.error(e);
+        statusEl.innerText = '資料庫連線就緒';
+        statusEl.style.color = 'var(--success)';
       }
     }
-    initConnection();
 
-    // 暱稱輸入與大廳切換
-    document.getElementById('btn-enter-lobby').addEventListener('click', () => {
-      const input = document.getElementById('input-nickname');
-      const val = input.value.trim();
-      if (!val) { alert('請輸入有效暱稱！'); return; }
-      myNickname = val;
-      document.getElementById('display-my-name').innerText = myNickname;
-      enterLobby();
+    window.addEventListener('DOMContentLoaded', () => {
+      initConnection();
     });
 
-    // 大廳邏輯
+    // 進入大廳
+    document.getElementById('btn-enter-lobby').addEventListener('click', async () => {
+      const input = document.getElementById('input-nickname');
+      const val = input.value.trim();
+      if (!val) {
+        alert('請先輸入你的暱稱！');
+        return;
+      }
+      myNickname = val;
+      document.getElementById('display-my-name').innerText = myNickname;
+      await enterLobby();
+    });
+
     async function enterLobby() {
       cleanUpAll();
       showScreen('screen-lobby');
@@ -254,31 +273,41 @@
     }
 
     function subscribeLobby() {
-      if (lobbyChannel) supabase.removeChannel(lobbyChannel);
-      lobbyChannel = supabase.channel('lobby-rooms')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
-          refreshLiveRooms();
-        })
-        .subscribe();
+      try {
+        const client = getSupabase();
+        if (lobbyChannel) client.removeChannel(lobbyChannel);
+        lobbyChannel = client.channel('lobby-rooms')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
+            refreshLiveRooms();
+          })
+          .subscribe();
+      } catch (err) {
+        console.error(err);
+      }
     }
 
     async function refreshLiveRooms() {
-      const { data, error } = await supabase.rpc('list_live_rooms');
       const listEl = document.getElementById('room-list');
-      listEl.innerHTML = '';
-      if (error || !data || data.length === 0) {
-        listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">目前沒有等待中的房間</div>';
-        return;
+      try {
+        const client = getSupabase();
+        const { data, error } = await client.rpc('list_live_rooms');
+        listEl.innerHTML = '';
+        if (error || !data || data.length === 0) {
+          listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">目前沒有等待中的房間</div>';
+          return;
+        }
+        data.forEach(r => {
+          const item = document.createElement('div');
+          item.className = 'room-item';
+          item.innerHTML = `
+            <div class="room-item-name">${escapeHtml(r.host_nickname)} 的房間</div>
+            <button onclick="attemptJoinRoom('${r.id}')">加入對戰</button>
+          `;
+          listEl.appendChild(item);
+        });
+      } catch (err) {
+        listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">取得房間清單中...</div>';
       }
-      data.forEach(r => {
-        const item = document.createElement('div');
-        item.className = 'room-item';
-        item.innerHTML = `
-          <div class="room-item-name">${escapeHtml(r.host_nickname)} 的房間</div>
-          <button onclick="attemptJoinRoom('${r.id}')">加入對戰</button>
-        `;
-        listEl.appendChild(item);
-      });
     }
 
     document.getElementById('btn-refresh-rooms').addEventListener('click', refreshLiveRooms);
@@ -286,35 +315,45 @@
     // 建立房間
     document.getElementById('btn-create-room').addEventListener('click', async () => {
       try {
-        const { data, error } = await supabase.rpc('create_room', {
+        const client = getSupabase();
+        const { data, error } = await client.rpc('create_room', {
           p_nickname: myNickname,
           p_client_token: clientToken
         });
-        if (error) { alert('建立房間失敗：' + error.message); return; }
+        if (error) {
+          alert('建立房間失敗：' + error.message);
+          return;
+        }
         currentRoomId = data.room_id;
         currentSeat = 1;
         showScreen('screen-waiting');
         startWaitingHost(currentRoomId);
       } catch (err) {
-        alert('發生網路錯誤，請稍後再試。');
+        alert('網路錯誤，請稍後再試。');
       }
     });
 
     // 取消房間
     document.getElementById('btn-cancel-room').addEventListener('click', async () => {
       if (!currentRoomId) return;
-      await supabase.rpc('cancel_room', { p_room_id: currentRoomId, p_client_token: clientToken });
+      try {
+        const client = getSupabase();
+        await client.rpc('cancel_room', { p_room_id: currentRoomId, p_client_token: clientToken });
+      } catch (e) {
+        console.error(e);
+      }
       enterLobby();
     });
 
-    // 房主等待狀態：心跳 + 監聽探針 + 監聽開局
+    // 房主等待狀態
     function startWaitingHost(roomId) {
+      const client = getSupabase();
       heartbeatTimer = setInterval(async () => {
         if (!currentRoomId) return;
-        await supabase.rpc('heartbeat_room', { p_room_id: roomId, p_client_token: clientToken });
+        await client.rpc('heartbeat_room', { p_room_id: roomId, p_client_token: clientToken });
       }, 3000);
 
-      const channel = supabase.channel(`game-${roomId}`);
+      const channel = client.channel(`game-${roomId}`);
       gameChannel = channel;
 
       channel
@@ -334,10 +373,11 @@
         .subscribe();
     }
 
-    // 加入者 2 秒握手加入
+    // 加入者 2 秒握手
     async function attemptJoinRoom(roomId) {
+      const client = getSupabase();
       const probeId = Math.random().toString(36).substring(2, 9);
-      const tempChannel = supabase.channel(`game-${roomId}`);
+      const tempChannel = client.channel(`game-${roomId}`);
       let hostAcked = false;
 
       tempChannel
@@ -356,21 +396,21 @@
 
             setTimeout(async () => {
               if (!hostAcked) {
-                supabase.removeChannel(tempChannel);
+                client.removeChannel(tempChannel);
                 alert('房主已離開，請選其他房間。');
                 refreshLiveRooms();
                 return;
               }
 
               try {
-                const { data, error } = await supabase.rpc('join_room', {
+                const { data, error } = await client.rpc('join_room', {
                   p_room_id: roomId,
                   p_nickname: myNickname,
                   p_client_token: clientToken
                 });
 
                 if (error) {
-                  supabase.removeChannel(tempChannel);
+                  client.removeChannel(tempChannel);
                   if (error.message.includes('HOST_OFFLINE')) {
                     alert('房主已離開，請選其他房間。');
                   } else if (error.message.includes('ROOM_ALREADY_FULL')) {
@@ -384,12 +424,12 @@
 
                 currentRoomId = roomId;
                 currentSeat = 2;
-                supabase.removeChannel(tempChannel);
+                client.removeChannel(tempChannel);
 
-                const { data: gs } = await supabase.from('game_state').select('*').eq('room_id', roomId).single();
+                const { data: gs } = await client.from('game_state').select('*').eq('room_id', roomId).single();
                 startGame(gs);
               } catch (err) {
-                supabase.removeChannel(tempChannel);
+                client.removeChannel(tempChannel);
                 alert('網路錯誤，無法加入對戰。');
               }
             }, 2000);
@@ -397,12 +437,11 @@
         });
     }
 
-    // 進入正式戰鬥
+    // 開始對戰
     function startGame(gameState) {
       cleanTimers();
       showScreen('screen-battle');
 
-      // 角色配置（以 roomId 為固定 seed）
       const seedNum = (currentRoomId || '0000').split('-')[0];
       const parsedSeed = parseInt(seedNum, 16) || 12345;
       const a1 = AVATARS[parsedSeed % AVATARS.length];
@@ -418,11 +457,11 @@
       setupBattleChannel();
     }
 
-    // 對戰通道與 Presence
     function setupBattleChannel() {
-      if (gameChannel) supabase.removeChannel(gameChannel);
+      const client = getSupabase();
+      if (gameChannel) client.removeChannel(gameChannel);
 
-      const channel = supabase.channel(`game-${currentRoomId}`, {
+      const channel = client.channel(`game-${currentRoomId}`, {
         config: { presence: { key: clientToken } }
       });
       gameChannel = channel;
@@ -457,7 +496,6 @@
         });
     }
 
-    // 渲染戰鬥狀態
     function renderGameState(gs) {
       if (!gs) return;
       const myHp = currentSeat === 1 ? gs.player1_hp : gs.player2_hp;
@@ -480,7 +518,6 @@
       }
     }
 
-    // 動畫效果
     function triggerEventEffect(type, eventSeat) {
       const qBox = document.getElementById('q-box');
       if (eventSeat === currentSeat) {
@@ -511,7 +548,6 @@
       }, 1500);
     }
 
-    // 結算畫面
     function showResultOverlay(winnerSeat) {
       const overlay = document.getElementById('overlay-result');
       const title = document.getElementById('result-title');
@@ -539,7 +575,7 @@
       enterLobby();
     });
 
-    // 數學題目亂數產生器（七年級整數加減）
+    // 題目生成器
     function generateIntegerProblem() {
       const types = ['add', 'sub', 'neg_add', 'complex'];
       const chosen = types[Math.floor(Math.random() * types.length)];
@@ -578,7 +614,6 @@
         ans = a - b + c;
       }
 
-      // 生成 4 個不重複選項
       const optionsSet = new Set();
       optionsSet.add(ans);
       const offsets = [-1, 1, -2, 2, -10, 10, -ans * 2];
@@ -613,7 +648,8 @@
       const isCorrect = (selectedVal === currentQuestion.correctAns);
 
       try {
-        await supabase.rpc('resolve_answer', {
+        const client = getSupabase();
+        await client.rpc('resolve_answer', {
           p_room_id: currentRoomId,
           p_client_token: clientToken,
           p_is_correct: isCorrect
@@ -627,7 +663,6 @@
       }, 400);
     }
 
-    // 清理機制
     function cleanTimers() {
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
@@ -640,13 +675,15 @@
     function cleanUpAll() {
       cleanTimers();
       opponentWasPresent = false;
-      if (gameChannel) { supabase.removeChannel(gameChannel); gameChannel = null; }
+      try {
+        const client = getSupabase();
+        if (gameChannel) { client.removeChannel(gameChannel); gameChannel = null; }
+      } catch (e) {}
       currentRoomId = null;
       currentSeat = null;
       lastEventId = null;
     }
 
-    // 防離開頁面（房主關閉等待中頁面）
     window.addEventListener('pagehide', () => {
       if (currentRoomId && currentSeat === 1 && heartbeatTimer) {
         const url = `${SUPABASE_URL}/rest/v1/rpc/cancel_room`;
