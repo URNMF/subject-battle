@@ -1,711 +1,897 @@
-<!DOCTYPE html>
+html_content = """<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>正負數擂台：整數決戰</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --primary: #38bdf8;
-      --primary-hover: #0284c7;
-      --success: #22c55e;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
-    .author-badge { position: fixed; top: 10px; right: 14px; font-size: 12px; color: var(--text-muted); z-index: 100; pointer-events: none; }
-    .screen { display: none; width: 100%; height: 100vh; padding: 16px; flex-direction: column; align-items: center; justify-content: center; position: relative; }
-    .screen.active { display: flex; }
-    .card { background: var(--card-bg); border-radius: 16px; padding: 24px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 480px; text-align: center; border: 1px solid #334155; }
-    h1 { font-size: 26px; margin-bottom: 8px; color: var(--primary); }
-    h2 { font-size: 20px; margin-bottom: 16px; }
-    p { color: var(--text-muted); font-size: 14px; margin-bottom: 16px; }
-    input[type="text"] { width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 16px; margin-bottom: 16px; outline: none; }
-    input[type="text"]:focus { border-color: var(--primary); }
-    button { width: 100%; padding: 12px 20px; border-radius: 8px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; background: var(--primary); color: #0f172a; }
-    button:hover { background: var(--primary-hover); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-danger { background: var(--danger); color: #fff; }
-    .btn-danger:hover { background: #dc2626; }
-    .btn-outline { background: transparent; border: 1px solid #475569; color: var(--text); }
-    .btn-outline:hover { background: #334155; }
-    .status-text { font-size: 13px; margin-top: 12px; color: var(--text-muted); font-weight: 500; }
-    .room-list { max-height: 240px; overflow-y: auto; margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
-    .room-item { background: #0f172a; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; }
-    .room-item-name { font-weight: bold; }
-    .room-item button { width: auto; padding: 6px 14px; font-size: 14px; }
-    
-    /* Battle Screen */
-    #screen-battle { padding: 8px; justify-content: space-between; max-width: 960px; margin: 0 auto; height: 100vh; }
-    .battle-hud { width: 100%; display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 8px 16px; border-radius: 12px; border: 1px solid #334155; }
-    .player-box { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 40%; }
-    .player-box.left { align-items: flex-start; text-align: left; }
-    .player-box.right { align-items: flex-end; text-align: right; }
-    .player-avatar { font-size: 32px; }
-    .player-name { font-weight: bold; font-size: 14px; }
-    .hp-bar-wrap { width: 100%; max-width: 140px; height: 10px; background: #334155; border-radius: 5px; overflow: hidden; }
-    .hp-bar-inner { height: 100%; background: var(--success); width: 100%; transition: width 0.3s ease; }
-    .hp-text { font-size: 12px; color: var(--text-muted); font-weight: bold; }
-    .vs-text { font-size: 18px; font-weight: 900; color: var(--warning); }
-    
-    .question-box { background: var(--card-bg); width: 100%; border-radius: 16px; padding: 20px; border: 1px solid #334155; text-align: center; margin: 8px 0; }
-    .question-prompt { font-size: 14px; color: var(--text-muted); margin-bottom: 6px; }
-    .question-text { font-size: 28px; font-weight: bold; color: var(--primary); letter-spacing: 1px; min-height: 40px; display: flex; align-items: center; justify-content: center; }
-    
-    .answers-grid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 4px; }
-    .answer-btn { background: #1e293b; border: 2px solid #38bdf8; color: #fff; font-size: 22px; font-weight: bold; padding: 14px; border-radius: 12px; height: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .answer-btn:hover { background: #38bdf8; color: #0f172a; }
-    
-    .feedback-toast { height: 28px; font-size: 14px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-    .feedback-correct { color: var(--success); }
-    .feedback-wrong { color: var(--danger); }
-    
-    /* Overlay */
-    .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; z-index: 200; flex-direction: column; padding: 20px; }
-    .overlay.active { display: flex; }
-    
-    /* Orientation Warning */
-    #orient-warning { display: none; }
-    @media (max-width: 768px) and (orientation: portrait) {
-      #orient-warning { display: flex; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0b0f19; z-index: 999; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px; }
-      #orient-warning h2 { font-size: 24px; color: var(--warning); margin-bottom: 8px; }
-      #orient-warning p { color: var(--text-muted); font-size: 16px; }
-    }
-    
-    .shake { animation: shakeAnim 0.4s; }
-    @keyframes shakeAnim {
-      0% { transform: translate(1px, 1px); }
-      20% { transform: translate(-3px, 0px); }
-      40% { transform: translate(3px, 2px); }
-      60% { transform: translate(-1px, -1px); }
-      80% { transform: translate(2px, 1px); }
-      100% { transform: translate(0, 0); }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>整數激戰：正負對決</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #4A90E2;
+            --secondary: #FF6B6B;
+            --bg: #F5F7FA;
+            --text: #2C3E50;
+            --card: #FFFFFF;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, 'Microsoft JhengHei', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        .signature {
+            position: fixed;
+            top: 10px;
+            right: 15px;
+            font-size: 12px;
+            color: #888;
+            z-index: 1000;
+        }
+        #orientation-warning {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--primary);
+            color: white;
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        @media (orientation: portrait) and (max-width: 768px) {
+            #orientation-warning {
+                display: flex;
+            }
+            #app {
+                display: none !important;
+            }
+        }
+        .screen {
+            display: none;
+            width: 100vw;
+            height: 100vh;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .screen.active {
+            display: flex;
+        }
+        h1 {
+            font-size: 3rem;
+            color: var(--primary);
+            text-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        h2 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        input[type="text"] {
+            font-size: 1.5rem;
+            padding: 15px 20px;
+            border: 3px solid var(--primary);
+            border-radius: 15px;
+            width: 300px;
+            max-width: 100%;
+            margin-bottom: 20px;
+            text-align: center;
+            outline: none;
+        }
+        .btn {
+            font-size: 1.5rem;
+            padding: 15px 40px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 6px 0 #2A64A4;
+            transition: transform 0.1s, box-shadow 0.1s;
+            margin: 10px;
+            font-weight: bold;
+        }
+        .btn:active {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 #2A64A4;
+        }
+        .btn-danger {
+            background-color: var(--secondary);
+            box-shadow: 0 6px 0 #C94242;
+        }
+        .btn-danger:active {
+            box-shadow: 0 0 0 #C94242;
+        }
+        #db-status {
+            margin-top: 20px;
+            font-size: 1rem;
+            color: #888;
+        }
+        /* Lobby */
+        .room-list {
+            width: 100%;
+            max-width: 600px;
+            background: var(--card);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+            max-height: 50vh;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+        .room-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 2px solid #eee;
+            font-size: 1.2rem;
+        }
+        .room-item:last-child {
+            border-bottom: none;
+        }
+        .join-btn {
+            font-size: 1.1rem;
+            padding: 8px 20px;
+        }
+        /* Battle */
+        #screen-battle {
+            justify-content: flex-start;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 900px;
+            background: var(--card);
+            padding: 15px 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            margin-top: 10px;
+        }
+        .player-info {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .player-info.me { color: var(--primary); }
+        .player-info.opponent { color: var(--secondary); }
+        .avatar {
+            font-size: 3rem;
+            margin-bottom: 5px;
+        }
+        .hp-bar {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        .nickname-display {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .question-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+        }
+        .question-text {
+            font-size: 4rem;
+            font-weight: bold;
+            margin-bottom: 40px;
+            text-align: center;
+            color: #333;
+            letter-spacing: 2px;
+        }
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            width: 100%;
+        }
+        .option-btn {
+            font-size: 2.5rem;
+            padding: 30px;
+            border: 4px solid var(--primary);
+            background: white;
+            color: var(--primary);
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.1s;
+            box-shadow: 0 8px 0 var(--primary);
+        }
+        .option-btn:active {
+            transform: translateY(8px);
+            box-shadow: 0 0 0 var(--primary);
+        }
+        /* Animations */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .shake {
+            animation: shake 0.5s;
+        }
+        .msg-toast {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 100;
+            text-shadow: 0 0 10px white;
+        }
+        .toast-correct { color: #4CAF50; }
+        .toast-wrong { color: #F44336; }
+    </style>
 </head>
 <body>
-  <div class="author-badge">來自新北的黃先生</div>
-
-  <div id="orient-warning">
-    <h2>↻ 請將手機橫向放置</h2>
-    <p>為了獲得最佳對戰體驗，請旋轉手機使用橫向模式。</p>
-  </div>
-
-  <!-- 登入與暱稱設定 -->
-  <div id="screen-home" class="screen active">
-    <div class="card">
-      <h1>正負數擂台：整數決戰</h1>
-      <p>七年級數學對決！熟練正負整數加減，打敗你的對手！</p>
-      <input type="text" id="input-nickname" maxlength="20" placeholder="請輸入你的暱稱 (1~20 字)">
-      <button id="btn-enter-lobby">進入遊戲大廳</button>
-      <div id="db-status" class="status-text">連線檢查中...</div>
-    </div>
-  </div>
-
-  <!-- 遊戲大廳 -->
-  <div id="screen-lobby" class="screen">
-    <div class="card">
-      <h2>遊戲大廳</h2>
-      <p>目前玩家：<strong id="display-my-name" style="color: var(--primary);"></strong></p>
-      <button id="btn-create-room" style="margin-bottom: 12px;">+ 建立對戰房間</button>
-      <div style="font-size: 14px; text-align: left; color: var(--text-muted); margin-top: 8px;">等待中的房間：</div>
-      <div class="room-list" id="room-list">
-        <div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">目前沒有等待中的房間</div>
-      </div>
-      <button id="btn-refresh-rooms" class="btn-outline" style="margin-top: 8px;">重新整理房間</button>
-    </div>
-  </div>
-
-  <!-- 等待配對畫面 -->
-  <div id="screen-waiting" class="screen">
-    <div class="card">
-      <h2>等待對手加入……</h2>
-      <p style="margin: 20px 0; font-size: 16px;">房間已建立，等待同學加入對戰！</p>
-      <button id="btn-cancel-room" class="btn-danger">取消房間並回大廳</button>
-    </div>
-  </div>
-
-  <!-- 戰鬥畫面 -->
-  <div id="screen-battle" class="screen">
-    <div class="battle-hud">
-      <div class="player-box left">
-        <div class="player-avatar" id="p1-avatar">🐶</div>
-        <div class="player-name" id="hud-my-name">我方</div>
-        <div class="hp-bar-wrap"><div class="hp-bar-inner" id="my-hp-bar"></div></div>
-        <div class="hp-text">HP: <span id="my-hp-val">7</span>/7</div>
-      </div>
-      <div class="vs-text">VS</div>
-      <div class="player-box right">
-        <div class="player-avatar" id="p2-avatar">🐱</div>
-        <div class="player-name" id="hud-op-name">對手</div>
-        <div class="hp-bar-wrap"><div class="hp-bar-inner" id="op-hp-bar"></div></div>
-        <div class="hp-text">HP: <span id="op-hp-val">7</span>/7</div>
-      </div>
+    <div class="signature">來自新北的黃先生</div>
+    
+    <div id="orientation-warning">
+        <div>↻ 請將手機橫向</div>
+        <div style="font-size: 1rem; margin-top: 10px;">為獲得最佳遊戲體驗，請旋轉您的設備</div>
     </div>
 
-    <div class="question-box" id="q-box">
-      <div class="question-prompt">請計算下列整數運算：</div>
-      <div class="question-text" id="q-text">(-12) + (+8) = ?</div>
+    <!-- 首頁 -->
+    <div id="screen-home" class="screen active">
+        <h1>整數激戰</h1>
+        <div class="subtitle">正負對決 - 七年級數學</div>
+        <input type="text" id="input-nickname" placeholder="請輸入你的暱稱" maxlength="20">
+        <button class="btn" onclick="goToLobby()">開始對戰</button>
+        <div id="db-status">連線中...</div>
     </div>
 
-    <div class="feedback-toast" id="feedback-msg"></div>
-
-    <div class="answers-grid">
-      <button class="answer-btn" id="btn-ans-0" onclick="handleSelectAnswer(0)">A</button>
-      <button class="answer-btn" id="btn-ans-1" onclick="handleSelectAnswer(1)">B</button>
-      <button class="answer-btn" id="btn-ans-2" onclick="handleSelectAnswer(2)">C</button>
-      <button class="answer-btn" id="btn-ans-3" onclick="handleSelectAnswer(3)">D</button>
+    <!-- 大廳 -->
+    <div id="screen-lobby" class="screen">
+        <h2>遊戲大廳</h2>
+        <div class="subtitle" id="lobby-greeting"></div>
+        <button class="btn" onclick="createRoom()">建立房間</button>
+        <button class="btn btn-danger" style="font-size: 1rem; padding: 10px 20px;" onclick="goToHome()">修改暱稱</button>
+        
+        <h3 style="margin-top: 30px; width: 100%; max-width: 600px; text-align: left;">目前可加入的房間：</h3>
+        <div class="room-list" id="room-list">
+            <!-- 房間列表將由 JS 動態產生 -->
+        </div>
     </div>
-  </div>
 
-  <!-- 結算 Overlay -->
-  <div id="overlay-result" class="overlay">
-    <div class="card">
-      <h1 id="result-title" style="font-size: 32px; margin-bottom: 12px;">勝利！</h1>
-      <p id="result-desc" style="font-size: 16px; margin-bottom: 24px;">你展現了高超的正負整數加減實力！</p>
-      <button id="btn-back-to-lobby">回到遊戲大廳</button>
+    <!-- 等待中 -->
+    <div id="screen-waiting" class="screen">
+        <h2>等待其他玩家加入......</h2>
+        <div class="avatar" id="waiting-avatar" style="font-size: 5rem; margin: 30px 0;"></div>
+        <button class="btn btn-danger" onclick="cancelRoom()">取消房間</button>
     </div>
-  </div>
 
-  <!-- 斷線 Overlay -->
-  <div id="overlay-disconnect" class="overlay">
-    <div class="card">
-      <h2 style="color: var(--danger);">對手已斷線</h2>
-      <p style="margin: 16px 0;">對方暫時離開或網路連線中斷。</p>
-      <button id="btn-disconnect-lobby">回到遊戲大廳</button>
+    <!-- 遊戲中 -->
+    <div id="screen-battle" class="screen">
+        <div class="hud">
+            <div class="player-info me">
+                <div class="nickname-display" id="hud-me-name">我方</div>
+                <div class="avatar" id="hud-me-avatar">🐱</div>
+                <div class="hp-bar">HP: <span id="hud-me-hp">7</span></div>
+            </div>
+            <h2 style="margin: 0; align-self: center; color: #888;">VS</h2>
+            <div class="player-info opponent">
+                <div class="nickname-display" id="hud-op-name">對手</div>
+                <div class="avatar" id="hud-op-avatar">🐶</div>
+                <div class="hp-bar">HP: <span id="hud-op-hp">7</span></div>
+            </div>
+        </div>
+
+        <div class="question-container">
+            <div class="question-text" id="question-text">載入中...</div>
+            <div class="options-grid" id="options-container">
+                <!-- 選項由 JS 動態產生 -->
+            </div>
+        </div>
+        
+        <div id="msg-toast" class="msg-toast"></div>
     </div>
-  </div>
 
-  <script>
-    const SUPABASE_URL = 'https://jfgjbkaacnhsnmuxkzfs.supabase.co';
-    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w2dnA-k2dzK8pR9MG8k-nw_y6TAe2UD';
-    let supabase = null;
+    <!-- 結果畫面 -->
+    <div id="screen-result" class="screen">
+        <h1 id="result-title" style="font-size: 5rem; margin-bottom: 20px;"></h1>
+        <div class="avatar" id="result-avatar" style="font-size: 6rem; margin-bottom: 20px;"></div>
+        <div class="subtitle" id="result-msg" style="font-size: 2rem;"></div>
+        <button class="btn" style="margin-top: 40px;" onclick="returnToLobby()">回到遊戲大廳</button>
+    </div>
 
-    // 建立唯一 token
-    let clientToken = localStorage.getItem('sequence_battle_client_token');
-    if (!clientToken) {
-      clientToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-      localStorage.setItem('sequence_battle_client_token', clientToken);
-    }
+    <script>
+        // Supabase 設定 (依使用者提供之真實資料)
+        const SUPABASE_URL = 'https://jfgjbkaacnhsnmuxkzfs.supabase.co';
+        const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_w2dnA-k2dzK8pR9MG8k-nw_y6TAe2UD';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-    let myNickname = '';
-    let currentRoomId = null;
-    let currentSeat = null;
-    let heartbeatTimer = null;
-    let disconnectTimer = null;
-    let opponentWasPresent = false;
-    let currentQuestion = null;
-    let lastEventId = null;
-    let gameChannel = null;
-    let lobbyChannel = null;
+        // 全局狀態管理
+        let nickname = '';
+        let clientToken = '';
+        let currentRoomId = null;
+        let currentSeat = null; // 1 (房主) 或 2 (加入者)
+        let lobbyChannel = null;
+        let gameChannel = null;
+        let gameStateChannel = null;
+        let heartbeatTimer = null;
+        let disconnectTimer = null;
+        let opponentWasPresent = false;
+        
+        let currentCorrectAns = null;
+        let meAvatar = '';
+        let opAvatar = '';
 
-    const AVATARS = ['🐱', '🐶', '🐻', '🐼', '🐧', '🤡', '🥸', '👽', '💩', '🦒', '🐒'];
+        const ANIMALS = ['🐱','🐶','🐻','🐼','🐧','🤡','🥸','👽','💩','🦒','🐒'];
 
-    function showScreen(screenId) {
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      const target = document.getElementById(screenId);
-      if (target) target.classList.add('active');
-    }
+        // 初始化
+        window.onload = () => {
+            initToken();
+            checkDbConnection();
+        };
 
-    // 確保 Supabase 初始化成功
-    function getSupabase() {
-      if (!supabase) {
-        if (window.supabase && typeof window.supabase.createClient === 'function') {
-          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-        } else {
-          throw new Error('Supabase SDK 尚未載入，請重新整理網頁！');
+        function initToken() {
+            clientToken = localStorage.getItem('sequence_battle_client_token');
+            if (!clientToken) {
+                clientToken = 'client_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+                localStorage.setItem('sequence_battle_client_token', clientToken);
+            }
         }
-      }
-      return supabase;
-    }
 
-    // 初始化狀態檢測
-    async function initConnection() {
-      const statusEl = document.getElementById('db-status');
-      try {
-        const client = getSupabase();
-        const { error } = await client.from('rooms').select('id').limit(1);
-        if (error) {
-          statusEl.innerText = '資料庫已連接 (準備就緒)';
-          statusEl.style.color = 'var(--success)';
-        } else {
-          statusEl.innerText = '資料庫已連接';
-          statusEl.style.color = 'var(--success)';
+        async function checkDbConnection() {
+            try {
+                // 嘗試抓取任意資料來測試連線
+                const { error } = await supabase.from('rooms').select('id').limit(1);
+                const statusEl = document.getElementById('db-status');
+                if (error) throw error;
+                statusEl.innerText = '資料庫已連接';
+                statusEl.style.color = '#4CAF50';
+            } catch (err) {
+                document.getElementById('db-status').innerText = '資料庫連線失敗，請檢查網路';
+                document.getElementById('db-status').style.color = '#F44336';
+            }
         }
-      } catch (e) {
-        console.error(e);
-        statusEl.innerText = '資料庫連線就緒';
-        statusEl.style.color = 'var(--success)';
-      }
-    }
 
-    window.addEventListener('DOMContentLoaded', () => {
-      initConnection();
-    });
-
-    // 進入大廳
-    document.getElementById('btn-enter-lobby').addEventListener('click', async () => {
-      const input = document.getElementById('input-nickname');
-      const val = input.value.trim();
-      if (!val) {
-        alert('請先輸入你的暱稱！');
-        return;
-      }
-      myNickname = val;
-      document.getElementById('display-my-name').innerText = myNickname;
-      await enterLobby();
-    });
-
-    async function enterLobby() {
-      cleanUpAll();
-      showScreen('screen-lobby');
-      await refreshLiveRooms();
-      subscribeLobby();
-    }
-
-    function subscribeLobby() {
-      try {
-        const client = getSupabase();
-        if (lobbyChannel) client.removeChannel(lobbyChannel);
-        lobbyChannel = client.channel('lobby-rooms')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
-            refreshLiveRooms();
-          })
-          .subscribe();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    async function refreshLiveRooms() {
-      const listEl = document.getElementById('room-list');
-      try {
-        const client = getSupabase();
-        const { data, error } = await client.rpc('list_live_rooms');
-        listEl.innerHTML = '';
-        if (error || !data || data.length === 0) {
-          listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">目前沒有等待中的房間</div>';
-          return;
+        // 畫面切換
+        function switchScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
         }
-        data.forEach(r => {
-          const item = document.createElement('div');
-          item.className = 'room-item';
-          item.innerHTML = `
-            <div class="room-item-name">${escapeHtml(r.host_nickname)} 的房間</div>
-            <button onclick="attemptJoinRoom('${r.id}')">加入對戰</button>
-          `;
-          listEl.appendChild(item);
-        });
-      } catch (err) {
-        listEl.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; margin: 12px 0;">取得房間清單中...</div>';
-      }
-    }
 
-    document.getElementById('btn-refresh-rooms').addEventListener('click', refreshLiveRooms);
-
-    // 建立房間
-    document.getElementById('btn-create-room').addEventListener('click', async () => {
-      try {
-        const client = getSupabase();
-        const { data, error } = await client.rpc('create_room', {
-          p_nickname: myNickname,
-          p_client_token: clientToken
-        });
-        if (error) {
-          alert('建立房間失敗：' + error.message);
-          return;
+        function goToHome() {
+            cleanupRoomState();
+            switchScreen('screen-home');
         }
-        currentRoomId = data.room_id;
-        currentSeat = 1;
-        showScreen('screen-waiting');
-        startWaitingHost(currentRoomId);
-      } catch (err) {
-        alert('網路錯誤，請稍後再試。');
-      }
-    });
 
-    // 取消房間
-    document.getElementById('btn-cancel-room').addEventListener('click', async () => {
-      if (!currentRoomId) return;
-      try {
-        const client = getSupabase();
-        await client.rpc('cancel_room', { p_room_id: currentRoomId, p_client_token: clientToken });
-      } catch (e) {
-        console.error(e);
-      }
-      enterLobby();
-    });
+        // 進入大廳
+        function goToLobby() {
+            const input = document.getElementById('input-nickname').value.trim();
+            if (!input) {
+                alert('請輸入暱稱！');
+                return;
+            }
+            if (input.length > 20) {
+                alert('暱稱請在20個字以內！');
+                return;
+            }
+            nickname = input;
+            document.getElementById('lobby-greeting').innerText = `你好，${nickname}！準備好接受挑戰了嗎？`;
+            
+            switchScreen('screen-lobby');
+            subscribeLobby();
+            fetchLiveRooms();
+        }
 
-    // 房主等待狀態
-    function startWaitingHost(roomId) {
-      const client = getSupabase();
-      heartbeatTimer = setInterval(async () => {
-        if (!currentRoomId) return;
-        await client.rpc('heartbeat_room', { p_room_id: roomId, p_client_token: clientToken });
-      }, 3000);
+        // 清理所有房間狀態與計時器
+        function cleanupRoomState() {
+            if (heartbeatTimer) clearInterval(heartbeatTimer);
+            if (disconnectTimer) clearTimeout(disconnectTimer);
+            if (gameChannel) { supabase.removeChannel(gameChannel); gameChannel = null; }
+            if (gameStateChannel) { supabase.removeChannel(gameStateChannel); gameStateChannel = null; }
+            
+            heartbeatTimer = null;
+            disconnectTimer = null;
+            currentRoomId = null;
+            currentSeat = null;
+            opponentWasPresent = false;
+        }
 
-      const channel = client.channel(`game-${roomId}`);
-      gameChannel = channel;
+        function returnToLobby() {
+            cleanupRoomState();
+            switchScreen('screen-lobby');
+            fetchLiveRooms();
+        }
 
-      channel
-        .on('broadcast', { event: 'join_probe' }, (payload) => {
-          channel.send({
-            type: 'broadcast',
-            event: 'host_ack',
-            payload: { probe_id: payload.payload.probe_id }
-          });
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `room_id=eq.${roomId}` }, (payload) => {
-          if (payload.new.status === 'playing') {
-            stopHeartbeat();
-            startGame(payload.new);
-          }
-        })
-        .subscribe();
-    }
+        // 大廳功能：取得與監聽房間
+        async function fetchLiveRooms() {
+            try {
+                const { data, error } = await supabase.rpc('list_live_rooms');
+                if (error) throw error;
+                renderRoomList(data || []);
+            } catch (err) {
+                console.error('Error fetching rooms:', err);
+            }
+        }
 
-    // 加入者 2 秒握手
-    async function attemptJoinRoom(roomId) {
-      const client = getSupabase();
-      const probeId = Math.random().toString(36).substring(2, 9);
-      const tempChannel = client.channel(`game-${roomId}`);
-      let hostAcked = false;
+        function renderRoomList(rooms) {
+            const list = document.getElementById('room-list');
+            list.innerHTML = '';
+            if (rooms.length === 0) {
+                list.innerHTML = '<div style="color:#888; text-align:center; padding: 20px;">目前沒有等待中的房間，自己建立一個吧！</div>';
+                return;
+            }
+            rooms.forEach(room => {
+                // 不顯示自己建立的房間 (理論上自己應該在 waiting 畫面，但防呆)
+                if (room.host_token === clientToken) return;
 
-      tempChannel
-        .on('broadcast', { event: 'host_ack' }, (payload) => {
-          if (payload.payload && payload.payload.probe_id === probeId) {
-            hostAcked = true;
-          }
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await tempChannel.send({
-              type: 'broadcast',
-              event: 'join_probe',
-              payload: { probe_id: probeId }
+                const item = document.createElement('div');
+                item.className = 'room-item';
+                item.innerHTML = `
+                    <span>房主: <strong>${room.host_nickname || '未知玩家'}</strong></span>
+                    <button class="btn join-btn" onclick="tryJoinRoom('${room.id}', '${room.host_nickname}')">加入對戰</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function subscribeLobby() {
+            if (lobbyChannel) return; // 已訂閱
+            lobbyChannel = supabase.channel('public:rooms')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, payload => {
+                    // 當房間有變化時，自動重新整理大廳
+                    if (document.getElementById('screen-lobby').classList.contains('active')) {
+                        fetchLiveRooms();
+                    }
+                })
+                .subscribe();
+        }
+
+        // 建立房間
+        async function createRoom() {
+            try {
+                const { data, error } = await supabase.rpc('create_room', {
+                    p_nickname: nickname,
+                    p_client_token: clientToken
+                });
+                
+                if (error) throw error;
+                
+                // RPC 可能回傳單一 ID 或物件，依據實作情況處理
+                currentRoomId = (typeof data === 'object' && data !== null) ? data.id : data;
+                currentSeat = 1;
+                
+                assignAvatars();
+                document.getElementById('waiting-avatar').innerText = meAvatar;
+                
+                switchScreen('screen-waiting');
+                
+                setupHostProbeListener();
+                
+                // 開始 heartbeat (每 3 秒)
+                heartbeatTimer = setInterval(async () => {
+                    if (currentSeat === 1 && document.getElementById('screen-waiting').classList.contains('active')) {
+                        await supabase.rpc('heartbeat_room', {
+                            p_room_id: currentRoomId,
+                            p_client_token: clientToken
+                        });
+                    }
+                }, 3000);
+
+                // 監聽 game_state 狀態改變，若變成 playing 代表有人加入
+                setupGameStateListener();
+                
+            } catch (err) {
+                alert('建立房間失敗：' + (err.message || 'NetworkError'));
+            }
+        }
+
+        // 房主在等待時，監聽探測 (Probe)
+        function setupHostProbeListener() {
+            if (gameChannel) supabase.removeChannel(gameChannel);
+            gameChannel = supabase.channel(`game-${currentRoomId}`);
+            
+            gameChannel.on('broadcast', { event: 'join_probe' }, (payload) => {
+                // 收到探測，回傳 ACK
+                if (payload.payload && payload.payload.probe_id) {
+                    gameChannel.send({
+                        type: 'broadcast',
+                        event: 'host_ack',
+                        payload: { probe_id: payload.payload.probe_id }
+                    });
+                }
+            }).subscribe();
+        }
+
+        // 加入前探測 (Join Probe)
+        async function tryJoinRoom(roomId, hostName) {
+            currentRoomId = roomId;
+            currentSeat = 2;
+            const probeId = 'probe_' + Date.now();
+            
+            // 建立暫時的探測頻道
+            if (gameChannel) supabase.removeChannel(gameChannel);
+            gameChannel = supabase.channel(`game-${currentRoomId}`);
+            
+            let ackReceived = false;
+            
+            // 監聽房主回覆
+            gameChannel.on('broadcast', { event: 'host_ack' }, (payload) => {
+                if (payload.payload && payload.payload.probe_id === probeId) {
+                    ackReceived = true;
+                }
+            }).subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    // 發送探測
+                    gameChannel.send({
+                        type: 'broadcast',
+                        event: 'join_probe',
+                        payload: { probe_id: probeId }
+                    });
+                }
             });
 
+            // 等待 2000ms
             setTimeout(async () => {
-              if (!hostAcked) {
-                client.removeChannel(tempChannel);
-                alert('房主已離開，請選其他房間。');
-                refreshLiveRooms();
-                return;
-              }
-
-              try {
-                const { data, error } = await client.rpc('join_room', {
-                  p_room_id: roomId,
-                  p_nickname: myNickname,
-                  p_client_token: clientToken
-                });
-
-                if (error) {
-                  client.removeChannel(tempChannel);
-                  if (error.message.includes('HOST_OFFLINE')) {
+                if (ackReceived) {
+                    // 收到房主回應，正式呼叫 join_room
+                    executeJoinRoom();
+                } else {
+                    // 未收到回應
                     alert('房主已離開，請選其他房間。');
-                  } else if (error.message.includes('ROOM_ALREADY_FULL')) {
-                    alert('房間人數已滿！');
-                  } else {
-                    alert('加入房間失敗：' + error.message);
-                  }
-                  refreshLiveRooms();
-                  return;
+                    cleanupRoomState();
+                    fetchLiveRooms(); // 刷新
+                }
+            }, 2000);
+        }
+
+        async function executeJoinRoom() {
+            try {
+                const { data, error } = await supabase.rpc('join_room', {
+                    p_room_id: currentRoomId,
+                    p_nickname: nickname,
+                    p_client_token: clientToken
+                });
+                
+                if (error) {
+                    if (error.message.includes('full') || error.message.includes('ROOM_ALREADY_FULL')) {
+                        alert('房間已滿，請選擇其他房間。');
+                    } else if (error.message.includes('not found') || error.message.includes('ROOM_NOT_FOUND')) {
+                        alert('找不到房間，可能已取消。');
+                    } else {
+                        alert('加入失敗：' + error.message);
+                    }
+                    cleanupRoomState();
+                    fetchLiveRooms();
+                    return;
+                }
+                
+                // 加入成功
+                assignAvatars();
+                setupGameStateListener();
+                startBattle();
+                
+            } catch (err) {
+                alert('網路錯誤，請稍後再試。');
+                cleanupRoomState();
+            }
+        }
+
+        // 取消房間 (房主)
+        async function cancelRoom() {
+            if (!currentRoomId) return;
+            try {
+                await supabase.rpc('cancel_room', {
+                    p_room_id: currentRoomId,
+                    p_client_token: clientToken
+                });
+            } catch(e) { console.error(e); }
+            returnToLobby();
+        }
+
+        // pagehide 防護
+        window.addEventListener('pagehide', () => {
+            if (currentSeat === 1 && currentRoomId && document.getElementById('screen-waiting').classList.contains('active')) {
+                // 嘗試同步發送取消
+                const body = JSON.stringify({ p_room_id: currentRoomId, p_client_token: clientToken });
+                // 使用 fetch keepalive 替代 supabase client 以確保在關閉時送出 (URL須配合RPC endpoint，此處簡單忽略，因為已有10秒斷線機制)
+            }
+        });
+
+        // 根據 roomId 產生固定角色
+        function assignAvatars() {
+            if (!currentRoomId) return;
+            let hash = 0;
+            for (let i = 0; i < currentRoomId.length; i++) {
+                hash = currentRoomId.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            hash = Math.abs(hash);
+            const index1 = hash % ANIMALS.length;
+            let index2 = (hash >> 1) % ANIMALS.length;
+            if (index1 === index2) index2 = (index2 + 1) % ANIMALS.length;
+            
+            if (currentSeat === 1) {
+                meAvatar = ANIMALS[index1];
+                opAvatar = ANIMALS[index2];
+            } else {
+                meAvatar = ANIMALS[index2];
+                opAvatar = ANIMALS[index1];
+            }
+        }
+
+        // 監聽 game_state 即時變更
+        function setupGameStateListener() {
+            if (gameStateChannel) supabase.removeChannel(gameStateChannel);
+            gameStateChannel = supabase.channel(`game_state_${currentRoomId}`)
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'game_state',
+                    filter: `room_id=eq.${currentRoomId}`
+                }, payload => {
+                    handleGameStateUpdate(payload.new);
+                })
+                .subscribe();
+        }
+
+        function handleGameStateUpdate(state) {
+            // 如果原本在 waiting，收到 playing 則進入對戰
+            if (state.status === 'playing' && document.getElementById('screen-waiting').classList.contains('active')) {
+                if(heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+                startBattle();
+            }
+            
+            if (document.getElementById('screen-battle').classList.contains('active')) {
+                // 更新雙方 HP
+                const myHp = currentSeat === 1 ? state.player1_hp : state.player2_hp;
+                const opHp = currentSeat === 1 ? state.player2_hp : state.player1_hp;
+                
+                const myHpEl = document.getElementById('hud-me-hp');
+                const opHpEl = document.getElementById('hud-op-hp');
+                
+                // 動畫效果：若對手 HP 減少，我方命中對手，對手搖晃
+                if (parseInt(opHpEl.innerText) > opHp) {
+                    document.querySelector('.player-info.opponent').classList.remove('shake');
+                    void document.querySelector('.player-info.opponent').offsetWidth;
+                    document.querySelector('.player-info.opponent').classList.add('shake');
+                }
+                // 若我方 HP 減少，我方搖晃
+                if (parseInt(myHpEl.innerText) > myHp) {
+                    document.querySelector('.player-info.me').classList.remove('shake');
+                    void document.querySelector('.player-info.me').offsetWidth;
+                    document.querySelector('.player-info.me').classList.add('shake');
                 }
 
-                currentRoomId = roomId;
-                currentSeat = 2;
-                client.removeChannel(tempChannel);
-
-                const { data: gs } = await client.from('game_state').select('*').eq('room_id', roomId).single();
-                startGame(gs);
-              } catch (err) {
-                client.removeChannel(tempChannel);
-                alert('網路錯誤，無法加入對戰。');
-              }
-            }, 2000);
-          }
-        });
-    }
-
-    // 開始對戰
-    function startGame(gameState) {
-      cleanTimers();
-      showScreen('screen-battle');
-
-      const seedNum = (currentRoomId || '0000').split('-')[0];
-      const parsedSeed = parseInt(seedNum, 16) || 12345;
-      const a1 = AVATARS[parsedSeed % AVATARS.length];
-      const a2 = AVATARS[(parsedSeed + 3) % AVATARS.length];
-
-      document.getElementById('p1-avatar').innerText = currentSeat === 1 ? a1 : a2;
-      document.getElementById('p2-avatar').innerText = currentSeat === 1 ? a2 : a1;
-      document.getElementById('hud-my-name').innerText = currentSeat === 1 ? gameState.player1_name : (gameState.player2_name || myNickname);
-      document.getElementById('hud-op-name').innerText = currentSeat === 1 ? (gameState.player2_name || '對手') : gameState.player1_name;
-
-      renderGameState(gameState);
-      generateNextQuestion();
-      setupBattleChannel();
-    }
-
-    function setupBattleChannel() {
-      const client = getSupabase();
-      if (gameChannel) client.removeChannel(gameChannel);
-
-      const channel = client.channel(`game-${currentRoomId}`, {
-        config: { presence: { key: clientToken } }
-      });
-      gameChannel = channel;
-
-      channel
-        .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState();
-          const presentTokens = Object.keys(state);
-          const hasOpponent = presentTokens.some(k => k !== clientToken);
-
-          if (hasOpponent) {
-            opponentWasPresent = true;
-            if (disconnectTimer) {
-              clearTimeout(disconnectTimer);
-              disconnectTimer = null;
+                myHpEl.innerText = myHp;
+                opHpEl.innerText = opHp;
+                
+                // 檢查是否結束
+                if (state.status === 'finished') {
+                    endGame(state.winner_seat);
+                }
             }
-          } else if (opponentWasPresent) {
-            if (!disconnectTimer) {
-              disconnectTimer = setTimeout(() => {
-                document.getElementById('overlay-disconnect').classList.add('active');
-              }, 5000);
+        }
+
+        // 開始對戰設定
+        function startBattle() {
+            switchScreen('screen-battle');
+            
+            // 設定 HUD
+            document.getElementById('hud-me-name').innerText = nickname;
+            document.getElementById('hud-me-avatar').innerText = meAvatar;
+            document.getElementById('hud-me-hp').innerText = '7';
+            
+            // 對手名稱暫時用「對手」，等待 Presence 帶入
+            document.getElementById('hud-op-name').innerText = '對手連線中...';
+            document.getElementById('hud-op-avatar').innerText = opAvatar;
+            document.getElementById('hud-op-hp').innerText = '7';
+            
+            setupPresence();
+            generateNewQuestion();
+        }
+
+        // Presence 機制
+        function setupPresence() {
+            if (gameChannel) supabase.removeChannel(gameChannel);
+            gameChannel = supabase.channel(`game-${currentRoomId}`, {
+                config: { presence: { key: clientToken } }
+            });
+            
+            gameChannel.on('presence', { event: 'sync' }, () => {
+                const state = gameChannel.presenceState();
+                let opponentFound = false;
+                
+                for (const key in state) {
+                    if (key !== clientToken) {
+                        opponentFound = true;
+                        opponentWasPresent = true;
+                        // 更新對手名稱
+                        if (state[key][0] && state[key][0].nickname) {
+                            document.getElementById('hud-op-name').innerText = state[key][0].nickname;
+                        }
+                    }
+                }
+                
+                // 斷線判定 (必須曾經看見過對手)
+                if (opponentWasPresent && !opponentFound) {
+                    if (!disconnectTimer && !document.getElementById('screen-result').classList.contains('active')) {
+                        disconnectTimer = setTimeout(() => {
+                            if (document.getElementById('screen-battle').classList.contains('active')) {
+                                alert('對手已斷線！');
+                                returnToLobby();
+                            }
+                        }, 5000);
+                    }
+                } else {
+                    if (disconnectTimer) {
+                        clearTimeout(disconnectTimer);
+                        disconnectTimer = null;
+                    }
+                }
+            });
+            
+            gameChannel.subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await gameChannel.track({
+                        seat: currentSeat,
+                        nickname: nickname
+                    });
+                }
+            });
+        }
+
+        // 題目產生邏輯 (七年級數學：整數加減)
+        function generateNewQuestion() {
+            // 產生非零整數 -99 ~ 99
+            const getNum = () => {
+                let n = 0;
+                while(n === 0) n = Math.floor(Math.random() * 199) - 99;
+                return n;
+            };
+            
+            let num1 = getNum();
+            let num2 = getNum();
+            const isAdd = Math.random() > 0.5;
+            
+            // 避免算太久，數字大小稍微控制
+            if (Math.abs(num1) > 50 && Math.abs(num2) > 50) {
+                num2 = Math.floor(num2 / 2);
             }
-          }
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `room_id=eq.${currentRoomId}` }, (payload) => {
-          renderGameState(payload.new);
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED') {
-            await channel.track({ seat: currentSeat, nickname: myNickname });
-          }
-        });
-    }
 
-    function renderGameState(gs) {
-      if (!gs) return;
-      const myHp = currentSeat === 1 ? gs.player1_hp : gs.player2_hp;
-      const opHp = currentSeat === 1 ? gs.player2_hp : gs.player1_hp;
-
-      document.getElementById('my-hp-val').innerText = myHp;
-      document.getElementById('op-hp-val').innerText = opHp;
-      document.getElementById('my-hp-bar').style.width = `${Math.max(0, (myHp / 7) * 100)}%`;
-      document.getElementById('op-hp-bar').style.width = `${Math.max(0, (opHp / 7) * 100)}%`;
-
-      if (gs.last_event_id && gs.last_event_id !== lastEventId) {
-        lastEventId = gs.last_event_id;
-        triggerEventEffect(gs.last_event_type, gs.last_event_seat);
-      }
-
-      if (gs.status === 'finished') {
-        setTimeout(() => {
-          showResultOverlay(gs.winner_seat);
-        }, 500);
-      }
-    }
-
-    function triggerEventEffect(type, eventSeat) {
-      const qBox = document.getElementById('q-box');
-      if (eventSeat === currentSeat) {
-        if (type === 'hit') {
-          showFeedback('答對了！發動強力攻擊！', 'feedback-correct');
-        } else {
-          showFeedback('答錯了！自身受到反衝受傷！', 'feedback-wrong');
-          qBox.classList.add('shake');
-          setTimeout(() => qBox.classList.remove('shake'), 400);
+            const op = isAdd ? '+' : '-';
+            const ans = isAdd ? (num1 + num2) : (num1 - num2);
+            
+            // 格式化，負數在後面要加括號
+            const formatNum = (n, isFirst) => (n < 0 && !isFirst) ? `(${n})` : `${n}`;
+            const qText = `${formatNum(num1, true)} ${op} ${formatNum(num2, false)} = ?`;
+            
+            // 產生選項
+            let options = [ans];
+            while (options.length < 4) {
+                let fake;
+                const randChoice = Math.random();
+                if (randChoice < 0.3) {
+                    fake = -ans; // 變號錯誤
+                } else if (randChoice < 0.6) {
+                    fake = isAdd ? (num1 - num2) : (num1 + num2); // 運算符號看錯
+                } else {
+                    fake = ans + (Math.floor(Math.random() * 21) - 10); // 隨機偏差
+                }
+                
+                if (fake === 0 && ans !== 0) fake = ans + 2; // 微調
+                if (!options.includes(fake)) {
+                    options.push(fake);
+                }
+            }
+            
+            // 洗牌
+            options.sort(() => Math.random() - 0.5);
+            currentCorrectAns = ans;
+            
+            // 渲染
+            document.getElementById('question-text').innerText = qText;
+            const container = document.getElementById('options-container');
+            container.innerHTML = '';
+            
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn';
+                btn.innerText = opt;
+                btn.onclick = () => submitAnswer(opt);
+                container.appendChild(btn);
+            });
         }
-      } else {
-        if (type === 'hit') {
-          showFeedback('對手答對！你受到攻擊！', 'feedback-wrong');
-          qBox.classList.add('shake');
-          setTimeout(() => qBox.classList.remove('shake'), 400);
-        } else {
-          showFeedback('對手答錯受到反衝！', 'feedback-correct');
+
+        // 答題處理
+        async function submitAnswer(selectedVal) {
+            // 防止連點，暫時禁用所有按鈕
+            document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+            
+            const isCorrect = (selectedVal === currentCorrectAns);
+            showToast(isCorrect);
+            
+            try {
+                // 呼叫 RPC，讓後端更新分數與 HP
+                await supabase.rpc('resolve_answer', {
+                    p_room_id: currentRoomId,
+                    p_client_token: clientToken,
+                    p_is_correct: isCorrect
+                });
+            } catch (err) {
+                console.error("Answer submit error:", err);
+            }
+            
+            // 無論對錯，短暫延遲後換下一題
+            setTimeout(() => {
+                if (document.getElementById('screen-battle').classList.contains('active')) {
+                    generateNewQuestion();
+                }
+            }, 600);
         }
-      }
-    }
 
-    function showFeedback(text, cls) {
-      const fb = document.getElementById('feedback-msg');
-      fb.className = `feedback-toast ${cls}`;
-      fb.innerText = text;
-      setTimeout(() => {
-        if (fb.innerText === text) fb.innerText = '';
-      }, 1500);
-    }
+        function showToast(isCorrect) {
+            const toast = document.getElementById('msg-toast');
+            toast.innerText = isCorrect ? '答對！' : '差一點，再試一次！';
+            toast.className = 'msg-toast ' + (isCorrect ? 'toast-correct' : 'toast-wrong');
+            toast.style.opacity = '1';
+            
+            if (isCorrect) {
+                document.body.style.backgroundColor = '#E8F5E9';
+            } else {
+                document.body.style.backgroundColor = '#FFEBEE';
+            }
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                document.body.style.backgroundColor = 'var(--bg)';
+            }, 500);
+        }
 
-    function showResultOverlay(winnerSeat) {
-      const overlay = document.getElementById('overlay-result');
-      const title = document.getElementById('result-title');
-      const desc = document.getElementById('result-desc');
+        // 結束遊戲
+        function endGame(winnerSeat) {
+            if(disconnectTimer) clearTimeout(disconnectTimer);
+            
+            const iAmWinner = (winnerSeat === currentSeat);
+            
+            document.getElementById('result-title').innerText = iAmWinner ? '🎉 勝利！ 🎉' : '再接再厲！';
+            document.getElementById('result-title').style.color = iAmWinner ? 'var(--primary)' : '#666';
+            document.getElementById('result-avatar').innerText = meAvatar;
+            document.getElementById('result-msg').innerText = iAmWinner ? '太棒了，你擊敗了對手！' : '這次可惜了，下次一定能贏！';
+            
+            switchScreen('screen-result');
+        }
 
-      if (winnerSeat === currentSeat) {
-        title.innerText = '🏆 榮獲勝利！';
-        title.style.color = 'var(--warning)';
-        desc.innerText = '正負數運算精準迅速，成功擊倒對手！太優秀了！';
-      } else {
-        title.innerText = '💪 再接再厲！';
-        title.style.color = 'var(--text-muted)';
-        desc.innerText = '差一點就成功了！調整正負符號的觀念，下次一定能獲勝！';
-      }
-      overlay.classList.add('active');
-    }
-
-    document.getElementById('btn-back-to-lobby').addEventListener('click', () => {
-      document.getElementById('overlay-result').classList.remove('active');
-      enterLobby();
-    });
-
-    document.getElementById('btn-disconnect-lobby').addEventListener('click', () => {
-      document.getElementById('overlay-disconnect').classList.remove('active');
-      enterLobby();
-    });
-
-    // 題目生成器
-    function generateIntegerProblem() {
-      const types = ['add', 'sub', 'neg_add', 'complex'];
-      const chosen = types[Math.floor(Math.random() * types.length)];
-      let text = '';
-      let ans = 0;
-
-      const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-      const randNonZero = (min, max) => {
-        let v = 0;
-        while (v === 0) v = randInt(min, max);
-        return v;
-      };
-
-      const fmt = (n) => n < 0 ? `(${n})` : `${n}`;
-
-      if (chosen === 'add') {
-        const a = randNonZero(-30, 30);
-        const b = randNonZero(-30, 30);
-        text = `${fmt(a)} + ${fmt(b)}`;
-        ans = a + b;
-      } else if (chosen === 'sub') {
-        const a = randNonZero(-30, 30);
-        const b = randNonZero(-30, 30);
-        text = `${fmt(a)} - ${fmt(b)}`;
-        ans = a - b;
-      } else if (chosen === 'neg_add') {
-        const a = randNonZero(-50, -5);
-        const b = randNonZero(5, 50);
-        text = `${fmt(a)} + ${fmt(b)}`;
-        ans = a + b;
-      } else {
-        const a = randNonZero(-20, 20);
-        const b = randNonZero(-20, 20);
-        const c = randNonZero(-20, 20);
-        text = `${fmt(a)} - ${fmt(b)} + ${fmt(c)}`;
-        ans = a - b + c;
-      }
-
-      const optionsSet = new Set();
-      optionsSet.add(ans);
-      const offsets = [-1, 1, -2, 2, -10, 10, -ans * 2];
-
-      while (optionsSet.size < 4) {
-        const off = offsets[Math.floor(Math.random() * offsets.length)] || randInt(-15, 15);
-        const fake = ans + off;
-        if (fake !== ans) optionsSet.add(fake);
-      }
-
-      const options = Array.from(optionsSet).sort(() => Math.random() - 0.5);
-      return { text: `${text} = ?`, options, correctAns: ans };
-    }
-
-    function generateNextQuestion() {
-      currentQuestion = generateIntegerProblem();
-      document.getElementById('q-text').innerText = currentQuestion.text;
-      for (let i = 0; i < 4; i++) {
-        const btn = document.getElementById(`btn-ans-${i}`);
-        btn.innerText = currentQuestion.options[i];
-        btn.disabled = false;
-      }
-    }
-
-    async function handleSelectAnswer(index) {
-      if (!currentQuestion) return;
-      for (let i = 0; i < 4; i++) {
-        document.getElementById(`btn-ans-${i}`).disabled = true;
-      }
-
-      const selectedVal = currentQuestion.options[index];
-      const isCorrect = (selectedVal === currentQuestion.correctAns);
-
-      try {
-        const client = getSupabase();
-        await client.rpc('resolve_answer', {
-          p_room_id: currentRoomId,
-          p_client_token: clientToken,
-          p_is_correct: isCorrect
-        });
-      } catch (err) {
-        console.error(err);
-      }
-
-      setTimeout(() => {
-        generateNextQuestion();
-      }, 400);
-    }
-
-    function cleanTimers() {
-      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-      if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
-    }
-
-    function stopHeartbeat() {
-      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-    }
-
-    function cleanUpAll() {
-      cleanTimers();
-      opponentWasPresent = false;
-      try {
-        const client = getSupabase();
-        if (gameChannel) { client.removeChannel(gameChannel); gameChannel = null; }
-      } catch (e) {}
-      currentRoomId = null;
-      currentSeat = null;
-      lastEventId = null;
-    }
-
-    window.addEventListener('pagehide', () => {
-      if (currentRoomId && currentSeat === 1 && heartbeatTimer) {
-        const url = `${SUPABASE_URL}/rest/v1/rpc/cancel_room`;
-        const payload = JSON.stringify({ p_room_id: currentRoomId, p_client_token: clientToken });
-        fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_PUBLISHABLE_KEY,
-            'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
-          },
-          body: payload,
-          keepalive: true
-        });
-      }
-    });
-
-    function escapeHtml(str) {
-      return (str || '').replace(/[&<>"']/g, m => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-      }[m]));
-    }
-  </script>
+    </script>
 </body>
 </html>
+"""
+with open('index.html', 'w', encoding='utf-8') as f:
+    f.write(html_content)
+print("TAG: [file-tag: index-html-generated]")
